@@ -1,0 +1,63 @@
+name: "Alert2Issue"
+description: "Automatically create GitHub issues from open Dependabot alerts"
+branding:
+  icon: "alert-octagon"
+  color: "red"
+
+inputs:
+  repo_file:
+    description: "Path to the file containing the list of GitHub repositories (one per line). If not provided, defaults to the current repository."
+    required: false
+    default: ""
+  gh_token:
+    description: "GitHub token with repo and security-events permissions"
+    required: true
+    default: ${{ github.token }}
+  dry_run:
+    description: "If true, only preview actions without making changes"
+    required: false
+    default: "false"
+  min_rate_limit:
+    description: "Minimum remaining GitHub API calls required to proceed"
+    required: false
+    default: "100"
+  version:
+    description: 'Version to install. "local" uses the code bundled with the action (default), or a specific PyPI version (e.g. "0.2.0").'
+    required: false
+    default: "local"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install alert2issue
+      shell: bash
+      run: |
+        if [ "${{ inputs.version }}" == "local" ]; then
+          pip install ${{ github.action_path }}
+        else
+          pip install alert2issue=="${{ inputs.version }}"
+        fi
+
+    - name: Run alert2issue
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh_token }}
+      run: |
+        OPTS=""
+        if [ "${{ inputs.dry_run }}" == "true" ]; then
+          OPTS="-d"
+        fi
+
+        REPO_FILE="${{ inputs.repo_file }}"
+        if [ -z "$REPO_FILE" ]; then
+          REPO_FILE="repos.txt"
+          echo "${{ github.repository }}" > "$REPO_FILE"
+          echo "No repo_file provided. Defaulting to current repository: ${{ github.repository }}"
+        fi
+
+        alert2issue $OPTS -m ${{ inputs.min_rate_limit }} "$REPO_FILE"
